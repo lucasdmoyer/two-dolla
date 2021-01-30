@@ -13,7 +13,7 @@ from utils import *
 tags_metadata = [
     {
         "name": "markow",
-        "description": "Upload a csv with a list of tickers in the first column, and it will give you a markowitz portfolio optimization",
+        "description": 'Put in a list of tickers, and it will give you a markowitz portfolio optimization. Example, "AAPL,MSFT,T" ' ,
     },
     {
         "name": "items",
@@ -69,12 +69,13 @@ async def portfolio(file_path,file: UploadFile=File(...)):
     #     with open(file_path + "stocks.pkl", "wb") as pkl_handle:
     #         pickle.dump(stocks, pkl_handle)
     return("Success! {} stock data gotten and saved to {}".format(len(stocks), file_path + "stocks.pkl"))
-
+# file: UploadFile=File(...)
 @app.post("/markowitz-optimize-portfolio", tags=["markow"])
-async def optimizePortfolio(markov_runs, MSR_or_GMV, file: UploadFile=File(...)):
-    contents = await file.read()
-    df = convertBytesToString(contents)
-    tickers = list(df.iloc[:,0])
+async def optimizePortfolio(markov_runs, MSR_or_GMV, ticker_data):
+    # contents = await file.read()
+    # df = convertBytesToString(contents)
+    # tickers = list(df.iloc[:,0])
+    tickers = ticker_data.split(",")
     stocks = getStocksData(tickers, 365)
     stocks = addBB(stocks,20)        
     stocks= addMACD(stocks)
