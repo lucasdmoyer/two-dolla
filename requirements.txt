@@ -7,3 +7,4 @@ uvloop
 yahoofinancials
 pandas-datareader
 tqdm
+python-multipart
