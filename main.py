@@ -7,7 +7,7 @@ from pandas_datareader import data
 import os
 import pickle 
 from tqdm import tqdm
-
+import scipy.stats as sp
 from utils import *
 
 tags_metadata = [
@@ -31,7 +31,7 @@ app = FastAPI(openapi_tags=tags_metadata)
 
 @app.get("/")
 async def root():
-    return {"message": "Hello World"}
+    return {"message": "Hello! Please go to /docs to continue!"}
 
 @app.get("/getMarketCap")
 async def marketCap(ticker):
@@ -119,6 +119,50 @@ async def optimizePortfolio(markov_runs, MSR_or_GMV, ticker_data):
     else:
         return("Neither GMV or MSR chosen")
 
+@app.post("/black-sholes-option-price", tags=["markow"])
+async def optimizePortfolio(c_or_p, price, strike, risk_free_rate, days, volatility):
+    a = BsmModel(c_or_p , float(price), float(strike), float(risk_free_rate), float(days)/365, float(volatility))
+    return(a.bsm_price())
+
+
+
+class BsmModel:
+    def __init__(self, option_type, price, strike, interest_rate, expiry, volatility, dividend_yield=0):
+        self.s = price # Underlying asset price
+        self.k = strike # Option strike K
+        self.r = interest_rate # Continuous risk fee rate
+        self.q = dividend_yield # Dividend continuous rate
+        self.T = expiry # time to expiry (year)
+        self.sigma = volatility # Underlying volatility
+        self.type = option_type # option type "p" put option "c" call option
+    def n(self, d):
+        # cumulative probability distribution function of standard normal distribution
+        return sp.norm.cdf(d)
+
+    def dn(self, d):
+        # the first order derivative of n(d)
+        return sp.norm.pdf(d)
+
+    def d1(self):
+        d1 = (np.log(self.s / self.k) + (self.r - self.q + self.sigma ** 2 * 0.5) * self.T) / (self.sigma * np.sqrt(self.T))
+        return d1
+
+    def d2(self):
+        d2 = (np.log(self.s / self.k) + (self.r - self.q - self.sigma ** 2 * 0.5) * self.T) / (self.sigma * np.sqrt(self.T))
+        return d2
+
+    def bsm_price(self):
+        d1 = self.d1()
+        d2 = d1 - self.sigma * np.sqrt(self.T)
+        if self.type == 'c':
+            price = np.exp(-self.r*self.T) * (self.s * np.exp((self.r - self.q)*self.T) * self.n(d1) - self.k * self.n(d2))
+            return price
+        elif self.type == 'p':
+            price = np.exp(-self.r*self.T) * (self.k * self.n(-d2) - (self.s * np.
+                                                                      exp((self.r - self.q)*self.T) * self.n(-d1)))
+            return price
+        else:
+            print("option type can only be c or p")
 
 
 

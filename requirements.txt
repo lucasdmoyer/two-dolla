@@ -9,3 +9,4 @@ pandas-datareader
 tqdm
 python-multipart
 httptools
+scipy
