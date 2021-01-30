@@ -8,3 +8,4 @@ yahoofinancials
 pandas-datareader
 tqdm
 python-multipart
+httptools
