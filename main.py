@@ -16,12 +16,8 @@ tags_metadata = [
         "description": 'Put in a list of tickers, and it will give you a markowitz portfolio optimization. Example, "AAPL,MSFT,T" ' ,
     },
     {
-        "name": "items",
-        "description": "Manage items. So _fancy_ they have their own docs.",
-        "externalDocs": {
-            "description": "Items external docs",
-            "url": "https://fastapi.tiangolo.com/",
-        },
+        "name": "black-sholes",
+        "description": 'Put in c for call or p for put, and fill in the rest of the options detail to get the option price' ,
     },
 ]
 
@@ -119,7 +115,7 @@ async def optimizePortfolio(markov_runs, MSR_or_GMV, ticker_data):
     else:
         return("Neither GMV or MSR chosen")
 
-@app.post("/black-sholes-option-price", tags=["markow"])
+@app.post("/black-sholes-option-price", tags=["black-sholes"])
 async def optimizePortfolio(c_or_p, price, strike, risk_free_rate, days, volatility):
     a = BsmModel(c_or_p , float(price), float(strike), float(risk_free_rate), float(days)/365, float(volatility))
     return(a.bsm_price())
