@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-import quandl   # Necessary for obtaining financial data easily
+#import quandl   # Necessary for obtaining financial data easily
 import json
 import time
 from yahoofinancials import YahooFinancials as YF
@@ -13,7 +13,7 @@ from tqdm import tqdm
 import scipy.stats as sp
 from backtest import Strategy, Portfolio
 import os
-from fbprophet import Prophet
+#from fbprophet import Prophet
 from utils import *
 
 
@@ -23,11 +23,11 @@ class RandomStrategy(Strategy):
     strategy, but perfectly acceptable for demonstrating the
     backtesting infrastructure!"""
 
-    def __init__(self, tickers, bars, strategy):
+    def __init__(self, bars, strategies):
         """Requires the symbol ticker and the pandas DataFrame of bars"""
-        self.tickers = tickers
+        self.tickers = list(bars.keys())
         self.bars = bars
-        self.strategy = strategy
+        self.strategies = strategies
 
     def genSignals(self):
         # uses the first stock in stocks to set the index for the signals df
@@ -36,7 +36,9 @@ class RandomStrategy(Strategy):
         #     signals[stock] = self.strategy(self.bars[stock])
         #     #signals[stock] = 1 #np.sign(np.random.randn(len(signals)))
         #     signals[stock][0:5] = 0.0
-        for strat in self.strategy:
+        for strat in self.strategies:
+
+            
             if (strat['name'] == 'MACDStrat'):
                 print('MACDStrat')
                 signals = self.MACDStrat(
@@ -46,9 +48,9 @@ class RandomStrategy(Strategy):
                 signals = self.singleStockStrat(
                     signals, strat['params']['ticker'])
             elif (strat['name'] == 'weighted'):
-                print(strat['params'].weights)
+                print(strat['params']['weights'])
                 signals = self.weightedStrat(
-                    signals, strat['params'].weights)
+                    signals, strat['params']['weights'])
         return signals
 
     def MACDStrat(self, signals, short, long):
@@ -95,40 +97,48 @@ class MyPortfolio(Portfolio):
     signals - A pandas DataFrame of signals (1, 0, -1) for each symbol.
     initial_capital - The amount in cash at the start of the portfolio."""
 
-    def __init__(self, tickers, bars, signals, initial_capital=1000):
-        self.tickers = tickers
+    def __init__(self, bars, initial_capital=1000):
+        self.tickers = list(bars.keys())
         self.bars = bars
-        self.signals = signals
+        # signals is a list of df's of signals
+        self.signals = []
+        # positions are either an avg or sum of the signals df with positions and pos_diff
+        self.positions = pd.DataFrame(index=self.bars[next(iter(self.bars))].index)
         self.initial_capital = float(initial_capital)
-        self.positions = signals
         self.forecast = {}
         self.lastDate = ''
+        self.strategies = []
+
+    def setStrats(self, strategies):
+        self.strategies = strategies
+    
+    # def genSignals(self, signals_list):
+    #     for strat, params in self.strategies:
+    #         df = strat(params)
+    #         self.signals.append(df)
+
 
     def generate_positions(self):
+        self.positions = pd.concat(self.strategies).groupby(['Date']).sum()
         for stock in list(self.tickers):
-            self.signals[stock+"_position"] = 1*self.signals[stock]
-            self.signals[stock +
-                         '_pos_diff'] = self.signals[stock+"_position"].diff()
-        return self.signals
+            if stock in self.positions.columns:
+                self.positions[stock+"_position"] = 1*self.positions[stock]
+                self.positions[stock +'_pos_diff'] = self.positions[stock+"_position"].diff()
+        return self.positions
 
-    def forecast_positions(self):
-        for stock in list(self.tickers):
-            self.signals[stock+"_position"] = 1*self.signals[stock]
-            self.signals[stock +
-                         '_pos_diff'] = self.signals[stock+"_position"].diff()
-        return self.signals
 
     def backtest_portfolio(self):
         holdings_col = []
         for stock in list(self.tickers):
-            #positions[stock+"_price"] = stocks[stock].Open
-            holdings_col.append(stock+"_holdings")
-            self.positions[stock+'_cash'] = (
-                self.positions[stock+'_pos_diff'] * self.bars[stock].Open)
-            self.positions[stock+"_holdings"] = self.bars[stock].Open * \
-                self.positions[stock+'_position']
-            self.positions[stock+'_open'] = self.bars[stock].Open
-            self.positions[stock+'_close'] = self.bars[stock].Close
+            if stock in self.positions.columns:
+                #positions[stock+"_price"] = stocks[stock].Open
+                holdings_col.append(stock+"_holdings")
+                self.positions[stock+'_cash'] = (
+                    self.positions[stock+'_pos_diff'] * self.bars[stock].Open)
+                self.positions[stock+"_holdings"] = self.bars[stock].Open * \
+                    self.positions[stock+'_position']
+                self.positions[stock+'_open'] = self.bars[stock].Open
+                self.positions[stock+'_close'] = self.bars[stock].Close
 
         # get total holdings, and cash flow
         self.positions['holdings'] = self.positions[holdings_col].sum(axis=1)

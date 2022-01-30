@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File,Request, UploadFile,Body
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,10 +13,10 @@ import pickle
 from pydantic import BaseModel
 from tqdm import tqdm
 import scipy.stats as sp
-from utils import *
+from utils import getStocks, getStockData
 from backtester import *
 from typing import List, Optional, Dict
-
+import datetime
 tags_metadata = [
     {
         "name": "markow",
@@ -32,6 +32,11 @@ tags_metadata = [
 class Weights(BaseModel):
     # weights:  List[float] = []
     weights: Dict[str, float] = None
+
+class StockRequest(BaseModel):
+    tickers:List[str]
+    days_back: int
+    save_data: bool
 
 
 app = FastAPI(openapi_tags=tags_metadata)
@@ -65,162 +70,77 @@ async def marketCap(ticker):
     return getMarketCap(ticker)
 
 
-@app.get("/getStocks")
-async def getStocks(ticker_data: str = "MSFT,TSLA,AAPL,T", days_back: int = 365):
-    tickers = ticker_data.split(",")
-    stocks = getStockData(tickers, 365)
+def getStockData(tickers=["T", "TSLA", "AAPL"], days_back=365):
     result = {}
-    for stock in list(stocks):
+    print(tickers)
+    def convert_time(epoch):
+        return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(epoch))
+    epoch_time = int(time.time())
+    day_epoch = 60*60*24
+    for tick in tqdm(tickers):
+        print(tick)
+        try:
+            stock_data = data.DataReader(tick,
+                                         start=convert_time(
+                                             epoch_time - (int(days_back) * day_epoch)),
+                                         end=convert_time(epoch_time),
+                                         data_source='yahoo')
+            result[tick] = stock_data
+        except:
+            print("Skipping stock for {}, bad data :<".format(tick))
+    return result
+
+
+@app.post("/getStocks")
+async def getStocks(request: StockRequest):
+    # stocks = {}
+    # path = r"C:\Users\moyer\OneDrive\development\stocks.pkl"
+    # with open(path, "rb") as pkl_handle:
+    #     stocks = pickle.load(pkl_handle)
+
+    # for stock in stocks.keys():
+    #     stocks[stock] = stocks[stock].loc['2014-01-01':]
+    stocks = {}
+    path = r"C:\Users\moyer\OneDrive\development\stocks.pkl"
+    # save to ./stocks.pkl
+    if (request.save_data):
+        stocks = getStockData(request.tickers, request.days_back)
+        with open(path, "wb") as pkl_handle:
+            pickle.dump(stocks, pkl_handle)
+    else:
+        with open(path, "rb") as pkl_handle:
+            stocks = pickle.load(pkl_handle)
+            for ticker in stocks.keys():
+                # Previous_Date = datetime.datetime.today() - datetime.timedelta(days=request.days_back)
+                # stocks[ticker] = stocks[ticker].truncate(before=Previous_Date.strftime('%Y-%m-%d'))
+                stocks[ticker] = stocks[ticker].tail(request.days_back)
+    result = {}
+    for stock in list(request.tickers):
         stocks[stock]['Date'] = stocks[stock].index.strftime('%Y-%m-%d')
         result[stock] = stocks[stock].to_dict(orient='records')
     json_compatible_item_data = jsonable_encoder(result)
     return json_compatible_item_data
 
 
-@app.get("/getBars")
-async def getBars(ticker_data: str = "AMD,GOOG,MMM", initial_captial: int = 100000):
-    tickers = ticker_data.split(",")
-    print(os.getcwd())
-    with open("./stocks.pkl", "rb") as pkl_handle:
-        bars = pickle.load(pkl_handle)
-    # tickers = ['GOOG', 'MMM', 'AMD']
-    bars = {key: bars[key] for key in tickers}
-    bars = addReturns(bars, 'Close')
-    strategy = [
-        {
-            'name': 'MACDStrat',
-            'params': {
-                'long': 26,
-                'short': 12
-            }
-        }
-    ]
-    rfs = RandomStrategy(tickers, bars, strategy)
-    signals = rfs.genSignals()
-    portfolio = MyPortfolio(tickers, bars, signals, initial_captial)
-    returns = portfolio.backtest_portfolio()
-    result = {}
-    for stock in list(bars):
-        bars[stock]['Date'] = bars[stock].index.strftime('%Y-%m-%d')
-        result[stock] = bars[stock].dropna().to_dict(orient='records')
-    json_compatible_item_data = jsonable_encoder(result)
-    return json_compatible_item_data
-
-
-@app.get("/backtestStrategy")
-async def getBars(ticker_data: str = "AMD,GOOG,MMM", initial_captial: int = 100000):
-    tickers = ticker_data.split(",")
-    print(os.getcwd())
-    with open("./stocks.pkl", "rb") as pkl_handle:
-        bars = pickle.load(pkl_handle)
-    # tickers = ['GOOG', 'MMM', 'AMD']
-    bars = {key: bars[key] for key in tickers}
-    bars = addReturns(bars, 'Close')
-    strategy = [
-        {
-            'name': 'MACDStrat',
-            'params': {
-                'long': 26,
-                'short': 12
-            }
-        }
-    ]
-    rfs = RandomStrategy(tickers, bars, strategy)
-    signals = rfs.genSignals()
-    portfolio = MyPortfolio(tickers, bars, signals, initial_captial)
-    returns = portfolio.backtest_portfolio()
-    returns = returns.dropna().to_dict(orient='records')
-    # result={}
-    # for stock in list(bars):
-    #     bars[stock]['Date'] = bars[stock].index.strftime('%Y-%m-%d')
-    #     result[stock] = bars[stock].dropna().to_dict(orient='records')
-
-    json_compatible_item_data = jsonable_encoder(returns)
-    return json_compatible_item_data
-
-
-@app.get("/getForecast")
-async def getBars(ticker_data: str = "AMD,GOOG,MMM", initial_captial: int = 100000):
-    tickers = ticker_data.split(",")
-    print(os.getcwd())
-    with open("./stocks.pkl", "rb") as pkl_handle:
-        bars = pickle.load(pkl_handle)
-    # tickers = ['GOOG', 'MMM', 'AMD']
-    bars = {key: bars[key] for key in tickers}
-    bars = addReturns(bars, 'Close')
-    strategy = [
-        {
-            'name': 'MACDStrat',
-            'params': {
-                'long': 26,
-                'short': 12
-            }
-        }
-    ]
-    rfs = RandomStrategy(tickers, bars, strategy)
-    signals = rfs.genSignals()
-    portfolio = MyPortfolio(tickers, bars, signals, initial_captial)
-    returns = portfolio.backtest_portfolio()
-    # print(returns)
-    forecast = portfolio.forecast_portfolio()
-    # returns['total'].plot().get_figure().savefig('output.png')
-    bars = forecast
-
-    result = {}
-    for stock in list(bars):
-        print(bars[stock].columns)
-        bars[stock]['Date'] = bars[stock].index.strftime('%Y-%m-%d')
-        bars[stock] = bars[stock].fillna('')
-        result[stock] = bars[stock].to_dict(orient='records')
-        # result[stock] = bars[stock].to_json(orient='records')
-    json_compatible_item_data = jsonable_encoder(result)
-    return json_compatible_item_data
-
-
-@app.get("/backtestSingleStock")
-async def getBars(ticker: str = "MMM", initial_captial: int = 100000):
-    with open("./stocks.pkl", "rb") as pkl_handle:
-        bars = pickle.load(pkl_handle)
-    # tickers = ['GOOG', 'MMM', 'AMD']
-    tickers = [ticker]
-    bars = {key: bars[key] for key in tickers}
-    bars = addReturns(bars, 'Close')
-    strategy = [
-        # {
-        #     'name':'MACDStrat',
-        #     'params':{
-        #         'long': 26,
-        #         'short': 12
-        #     }
-        # },
-        {
-            'name': 'single',
-            'params': {
-                'ticker': ticker
-            }
-        }
-    ]
-    rfs = RandomStrategy(tickers, bars, strategy)
-    signals = rfs.genSignals()
-    portfolio = MyPortfolio(tickers, bars, signals, initial_captial)
-    returns = portfolio.backtest_portfolio()
-    returns = returns.dropna().to_dict(orient='records')
-    # returns['total'].plot().get_figure().savefig('output.png')
-    # result={}
-    # for stock in list(bars):
-    #     bars[stock]['Date'] = bars[stock].index.strftime('%Y-%m-%d')
-    #     result[stock] = bars[stock].dropna().to_dict(orient='records')
-
-    json_compatible_item_data = jsonable_encoder(returns)
-    return json_compatible_item_data
-
 
 @app.get("/getTickers")
 async def getTickers():
-    with open("./stocks.pkl", "rb") as pkl_handle:
-        bars = pickle.load(pkl_handle)
+    stocks = {}
+    path = r"C:\Users\moyer\OneDrive\development\stocks.pkl"
+    with open(path, "rb") as pkl_handle:
+        stocks = pickle.load(pkl_handle)
     # tickers = ['GOOG', 'MMM', 'AMD']
-    return list(bars.keys())
+    return stocks.keys()
+
+@app.post("/portfolio")
+async def portfolio(params, days_back: int,initial_capital:float):
+    with open(path, "rb") as pkl_handle:
+        stocks = pickle.load(pkl_handle)
+        for ticker in stocks.keys():
+            stocks[ticker] = stocks[ticker].tail(days_back)
+        portfolio = MyPortfolio(stocks, initial_capital=initial_capital)
+        
+
 
 
 @app.post("/backtestPortfolio")
@@ -228,7 +148,6 @@ async def getBars(
         weights_data: Weights = {
             "weights":
                 {
-                    "AMD": 0.33,
                     "GOOG": 0.33,
                     "MMM": 0.33
                 }
@@ -238,19 +157,22 @@ async def getBars(
         bars = pickle.load(pkl_handle)
     # tickers = ['GOOG', 'MMM', 'AMD']
     # tickers = [ticker]
-    #tickers = ticker_data.split(",")
+    # tickers = ticker_data.split(",")
     tickers = weights_data.weights.keys()
     bars = {key: bars[key] for key in tickers}
     bars = addReturns(bars, 'Close')
-    strategy = [
-        {
-            'name': 'weighted',
-            'params': weights_data
-        }
-    ]
-    rfs = RandomStrategy(tickers, bars, strategy)
-    signals = rfs.genSignals()
-    portfolio = MyPortfolio(tickers, bars, signals, initial_captial)
+    # strategy = [
+    #     {
+    #         'name': 'weighted',
+    #         'params': weights_data
+    #     }
+    # ]
+
+    # rfs = RandomStrategy(tickers, bars, strategy)
+    # signals = rfs.genSignals()
+    portfolio = MyPortfolio(bars, initial_captial)
+
+    portfolio.setStrats([strat1])
 
     returns = portfolio.backtest_portfolio()
     # limit to past 50 days
@@ -270,7 +192,7 @@ async def getBars(
     result = pd.concat([returns, forecast_returns], axis=1).fillna('null')
     result['date'] = result.index
     result = result.to_dict(orient='records')
-    #result = pd.concat([returns, forecast_returns], axis=1).fillna('null').replace(to_replace=0, value="null").to_dict(orient='records')
+    # result = pd.concat([returns, forecast_returns], axis=1).fillna('null').replace(to_replace=0, value="null").to_dict(orient='records')
 
     json_compatible_item_data = jsonable_encoder(result)
     return json_compatible_item_data

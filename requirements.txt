@@ -3,7 +3,6 @@ numpy
 pandas
 uvicorn
 gunicorn
-uvloop
 yahoofinancials
 pandas-datareader
 tqdm
