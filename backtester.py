@@ -11,7 +11,7 @@ import os
 import pickle
 from tqdm import tqdm
 import scipy.stats as sp
-from backtest import Strategy, Portfolio
+from backtest import Strategy, Portfolio, Stock
 import os
 #from fbprophet import Prophet
 from utils import *
