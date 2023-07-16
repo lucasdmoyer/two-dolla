@@ -1,0 +1,11 @@
+/__pycache__
+.pyc
+/fin
+/fin2
+/__pycache__
+stocks.pkl
+curve
+stocks.pkl
+__pycache__/*
+balance_sheet_xbrl
+*.pyc

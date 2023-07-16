@@ -3,7 +3,7 @@ import pandas as pd
 #import quandl   # Necessary for obtaining financial data easily
 import json
 import time
-from yahoofinancials import YahooFinancials as YF
+# from yahoofinancials import YahooFinancials as YF
 import time
 import pandas as pd
 # from pandas_datareader import data

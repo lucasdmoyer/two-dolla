@@ -3,7 +3,10 @@ import pandas as pd
 import scipy.stats as sp
 import time
 from tqdm import tqdm
-
+from pandas_datareader import data
+import pickle as pickle
+import yfinance as yf
+yf.pdr_override() # <== that's all it takes :-)
 
 class BsmModel:
     def __init__(self, option_type, price, strike, interest_rate, expiry, volatility, dividend_yield=0):
@@ -48,24 +51,8 @@ class BsmModel:
             print("option type can only be c or p")
 
 
-def getStockData(tickers, days_back):
-    stocks = {}
-    epoch_time = int(time.time())
-    day_epoch = 60*60*24
-    for tick in tqdm(tickers):
-        try:
-            stock_data = data.DataReader(tick,
-                                         start=convert_time(
-                                             epoch_time - (days_back * day_epoch)),
-                                         end=convert_time(epoch_time),
-                                         data_source='yahoo')
-            stocks[tick] = stock_data
-        except:
-            print("Skipping stock for {}, bad data :<".format(tick))
-    return stocks
-
-
-def getStocks(tickers, days_back):
+# gets stock ticket data for current day going back days_back
+def getStocksData(tickers, days_back=10, save_new=False, path=r"C:\Users\moyer\OneDrive\development\fin-dashboard\app\stocks.pkl"):
     def convert_time(epoch):
         return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(epoch))
 
@@ -73,17 +60,34 @@ def getStocks(tickers, days_back):
     day_epoch = 60*60*24
     # tickers = df['Symbol'][:10]
     stocks = {}
-    for tick in tqdm(tickers):
-        try:
-            stock_data = data.DataReader(tick,
-                                         start=convert_time(
-                                             epoch_time - (int(days_back) * day_epoch)),
-                                         end=convert_time(epoch_time),
-                                         data_source='yahoo')
-            stocks[tick] = stock_data
-        except:
-            print("Skipping stock for {}, bad data :<".format(tick))
+    if (save_new):
+        for tick in tqdm(tickers):
+            try:
+
+                # download dataframe
+                # data = pdr.get_data_yahoo("SPY", start="2017-01-01", end="2017-04-30")
+                # data
+                # stock_data =  pdr.get_data_yahoo(tick, start="2017-01-01", end="2017-04-30") 3mo
+                stock_data =  pdr.get_data_yahoo(tick, period="3mo")
+                stocks[tick] = stock_data
+                with open(path, 'wb') as handle:
+                    pickle.dump(stocks, handle,
+                                protocol=pickle.HIGHEST_PROTOCOL)
+            except:
+                print("Skipping stock for {}, bad data :<".format(tick))
+    else:
+        with open(path, 'rb') as handle:
+            stocks = pickle.load(handle)
     return stocks
+# tickers = ['AAPL','T', 'MSFT']
+# stocks = getStocksData(tickers, 100, False)
+
+def getTickers(path=r"C:\Users\moyer\OneDrive\development\fin-dashboard\app\stocks.pkl"):
+    stocks = {}
+    with open(path, 'rb') as handle:
+        stocks = pickle.load(handle)
+        print(stocks)
+        return stocks.keys()
 
 
 def getPortReturns(stocks):
@@ -112,13 +116,15 @@ def addMACD(stocks, short, long):
     return(stocks)
 
 
+# used in bactest.py
 def macd(df, short=12, long=26):
     exp1 = df['Adj Close'].ewm(span=short, adjust=False).mean()
     exp2 = df['Adj Close'].ewm(span=long, adjust=False).mean()
     df['macd'] = exp1-exp2
     # df['macd_signal'] = df['macd'].ewm(
     #     span=9, adjust=False).mean()
-    df['macd_norm'] =(df['macd']-df['macd'].min())/(df['macd'].max()-df['macd'].min())
+    df['macd_norm'] = (df['macd']-df['macd'].min()) / \
+        (df['macd'].max()-df['macd'].min())
     return df['macd_norm']
 
 

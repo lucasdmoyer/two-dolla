@@ -23,7 +23,6 @@ class Strategy(object):
 
 
 # backtest.py
-
 class Portfolio(object):
     """An abstract base class representing a portfolio of 
     positions (including both instruments and cash), determined
@@ -31,28 +30,67 @@ class Portfolio(object):
 
     __metaclass__ = ABCMeta
 
-    def __init__(self, bars, initial_capital=1000):
-        self.tickers = list(bars.keys())
-        self.bars = bars
-        self.stocks = []  # List of Class Stock[]
+    def __init__(self, tickers, bars, initial_capital=1000):
+        self.tickers = tickers
+        self.bars = bars # dict of the ticker:OHLC df
+        self.stock_list = []
+        self.stocks = {}  # dict of Class Stock[]
+        # self.stocks = [Stock(self.stocks[x],x, self.initial_capital/len(self.tickers)) for x in self.tickers]
         self.backtest = {}
-        self.positions = {}
+        self.positions = {} # might not be needed if the self.stocks will have the positions, we can store the aggregated positions here
         self.strategies = []
         self.initial_capital = initial_capital
+        self.prepStockData()
+        
+    # takes a strat or list of stras and adds it to the stocks stratigies to execute
+    # all takes a list of tickers to put the strategy in
+    def addStrat(self, tickers, strat, **kwargs):
+#         print('adding strat ', tickers, strat)
+        for tick in tickers:
+            if isinstance(strat, str):
+                print("adding single strat")
+                try:
+                    func = getattr(self.stocks[tick], strat)(**kwargs)
+#                     print(func)
+                    self.stocks[tick].strategies.append(func)
+                except AttributeError:
+                    print("dostuff not found")
+                
+            else:
+                print("adding multiple strats")
+                print(self.stocks)
+                
+#                 self.stocks[tick].strategies.extend(strat)
+                for signal in strat:
+#                     print('signal')
+#                     print(signal)
+#                     print('signal value:')
+#                     print(signal['value'])
+                    self.stocks[signal['key']].strategies.append(signal['value']) 
+               
+
+    # creates the Stock objects and adds them to the self.stocks dict
+    def prepStockData(self):
+        for ticker in self.tickers:
+            self.stocks[ticker] = Stock(self.bars[ticker],ticker,1000) 
+
 
     def backtest_portfolio(self):
-        if not self.strategies:
-            for stock in self.stocks:
-                stock.generate_positions()
+        for stock in self.tickers:
+            self.stocks[stock].backtest()
+        sample_df = self.stocks[self.tickers[0]].bars
+#         print(sample_df)
+        self.positions = pd.DataFrame(index=self.bars[next(iter(self.bars))].index) # empty df with same index as bars
+        all_positions = [self.stocks[x].positions for x in self.tickers]
+        self.positions = pd.DataFrame(index=sample_df[next(iter(sample_df))].index) # empty df with same index as bars
 
-        self.positions = pd.concat(
-            [x.positions for x in self.stocks]).groupby(['Date']).sum()
+        sum_cols = ['holdings', 'cash', 'total']
+        for col in sum_cols:
+            self.positions[col] = pd.concat(all_positions).groupby('Date')[col].sum()
 
-        # self.positions[self.ticker+"_position"] = 1*self.positions[self.ticker]
-        # self.positions[self.ticker +
-        #                '_pos_diff'] = self.positions[self.ticker+"_position"].diff()
         return self.positions
 
+    # returns a dict of the symbol:[a df of the strategy with a Date index]
     def markowitz(self, params, weight=1):
         df = pd.DataFrame(index=self.bars[next(iter(self.bars))].index)
         bars = addReturns(self.bars, 'Adj Close')
@@ -71,7 +109,9 @@ class Portfolio(object):
                 "volatility": volatility,
                 "weights": weights
             }
-            df = df.append(row, ignore_index=True)
+            # df = df.append(row, ignore_index=True)
+            # df = df.concat([df,row])
+            df = pd.concat([df, pd.DataFrame.from_records([row])])
         df["sharpe"] = (df["return"] - risk_free) / df["volatility"]
 
         MSR = df.sort_values(by=["sharpe"], ascending=False).head(1)
@@ -83,32 +123,48 @@ class Portfolio(object):
         df = pd.DataFrame(index=self.bars[next(iter(self.bars))].index)
         for ticker in params['tickers']:
             df[ticker] = weights[ticker]
-        print("Optimum")
-        print(weights)
-
-        # return df
-
+        print("Optimum", weights)
         # buy weights
-        for stock in self.stocks:
-            params = {
-                stock.ticker: weights[stock.ticker]
+        result = []
+        for stock in self.tickers:
+#             print(stock)
+#             print(self.stocks[stock].buyWeights(weights[stock]))
+            strategy = {
+                'key': stock,
+                'value':self.stocks[stock].buyWeights(weights[stock])
             }
-            stock.strategies = [stock.buyWeights(params)]
-            stock.generate_positions()
-            stock.backtest()
-        return self.stocks
+            result.append(strategy)
+#             result[stock] = self.stocks[stock].buyWeights(weights[stock])
+#             self.stocks[stock].strategies.append(self.stocks[stock].buyWeights(weights[stock])) #= [self.stocks[stock].buyWeights(weights[stock])]
+        return result
+     
+    # returns a dict of the symbol:[a df of the strategy with a Date index]
+    def buyEven(self, weight=1):
+        result = []
+        for stock in self.stocks.keys():
+#             result[stock] = self.stocks[stock].buyWeights(weight)
+            strategy = {
+                'key': stock,
+                'value':self.stocks[stock].buyWeights(weight)
+            }
+            result.append(strategy)
+#             self.stocks[stock].strategies.append(self.stocks[stock].buy 
 
+    
 
 class Stock(object):
     def __init__(self, bars, ticker, initial_capital=1000):
-        self.bars = bars
-        self.ticker = ticker
+        self.bars = bars # df of the Open, High, Low, Close, Adj Close, Volume, with Date as index
+        self.ticker = ticker # str: ticket symbol
         self.positions = pd.DataFrame(
-            index=self.bars[next(iter(self.bars))].index)
-        self.strategies = []
+            index=self.bars[next(iter(self.bars))].index) # empty df with same index as bars
+        self.strategies = [] # list of df's with single column as the "buy signal" with the column name being the ticker
         self.initial_capital = float(initial_capital)
 
     def generate_positions(self):
+#         print("generate positoins called", self.ticker)
+#         print(self.strategies)
+#         print(type(self.strategies))
         if not self.strategies:
             # just set to zero
             self.positions = pd.DataFrame(
@@ -151,17 +207,17 @@ class Stock(object):
         return self.positions
     # takes a dict of weights and returns positions
 
-    def buyWeights(self, params={}):
+    def buyWeights(self,weight):
         # assert(weights.keys() in self.bars.keys())
         df = pd.DataFrame(index=self.bars[next(iter(self.bars))].index)
-        df[self.ticker] = params[self.ticker]
+        df[self.ticker] = weight
         df[self.ticker][0:1] = 0.0
         return df
 
-    def macd(self, params={}):
+    def macd(self, long=21,short=13):
         df = pd.DataFrame(index=self.bars[next(iter(self.bars))].index)
 
         df[self.ticker] = 0
         df[self.ticker] = macd(
-            df=self.bars, short=params[self.ticker]['short'], long=params[self.ticker]['long'])
+            df=self.bars, short=short, long=long)
         return df

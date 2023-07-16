@@ -1,10 +1,10 @@
-from fastapi import FastAPI, File,Request, UploadFile,Body
+from fastapi import FastAPI, File, Request, UploadFile, Body
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.cors import CORSMiddleware
 import json
-from yahoofinancials import YahooFinancials as YF
+# from yahoofinancials import YahooFinancials as YF
 import time
 import pandas as pd
 from pandas_datareader import data
@@ -13,7 +13,7 @@ import pickle
 from pydantic import BaseModel
 from tqdm import tqdm
 import scipy.stats as sp
-from utils import getStocks, getStockData
+import utils
 from backtester import *
 from typing import List, Optional, Dict
 import datetime
@@ -33,28 +33,29 @@ class Weights(BaseModel):
     # weights:  List[float] = []
     weights: Dict[str, float] = None
 
+
 class StockRequest(BaseModel):
-    tickers:List[str]
+    tickers: str
     days_back: int
     save_data: bool
 
 
 app = FastAPI(openapi_tags=tags_metadata)
 
-# origins = [
-#     "http://localhost:4200/",
-#     "https://localhost:4200/",
-#     "http://localhost",
-#     "http://localhost:8080",
-# ]
+origins = [
+    "http://localhost:4200/",
+    "https://localhost:4200/",
+    "http://localhost",
+    "http://localhost:8080",
+]
 
-# app.add_middleware(
-#     CORSMiddleware,
-#     allow_origins=origins,
-#     allow_credentials=True,
-#     allow_methods=["*"],
-#     allow_headers=["*"],
-# )
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.add_middleware(CORSMiddleware, allow_origins=[
                    "*"], allow_methods=["*"], allow_headers=["*"], expose_headers=["*"])
 # uvicorn main:app --reload
@@ -65,82 +66,39 @@ async def root():
     return {"message": "Hello! Please go to /docs to continue!"}
 
 
-@app.get("/getMarketCap")
-async def marketCap(ticker):
-    return getMarketCap(ticker)
-
-
-def getStockData(tickers=["T", "TSLA", "AAPL"], days_back=365):
-    result = {}
-    print(tickers)
-    def convert_time(epoch):
-        return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(epoch))
-    epoch_time = int(time.time())
-    day_epoch = 60*60*24
-    for tick in tqdm(tickers):
-        print(tick)
-        try:
-            stock_data = data.DataReader(tick,
-                                         start=convert_time(
-                                             epoch_time - (int(days_back) * day_epoch)),
-                                         end=convert_time(epoch_time),
-                                         data_source='yahoo')
-            result[tick] = stock_data
-        except:
-            print("Skipping stock for {}, bad data :<".format(tick))
-    return result
-
-
 @app.post("/getStocks")
-async def getStocks(request: StockRequest):
-    # stocks = {}
-    # path = r"C:\Users\moyer\OneDrive\development\stocks.pkl"
-    # with open(path, "rb") as pkl_handle:
-    #     stocks = pickle.load(pkl_handle)
-
-    # for stock in stocks.keys():
-    #     stocks[stock] = stocks[stock].loc['2014-01-01':]
+def getStocks(req : StockRequest):
+    tickers = req.tickers.split(',')
     stocks = {}
-    path = r"C:\Users\moyer\OneDrive\development\stocks.pkl"
     # save to ./stocks.pkl
-    if (request.save_data):
-        stocks = getStockData(request.tickers, request.days_back)
-        with open(path, "wb") as pkl_handle:
-            pickle.dump(stocks, pkl_handle)
-    else:
-        with open(path, "rb") as pkl_handle:
-            stocks = pickle.load(pkl_handle)
-            for ticker in stocks.keys():
-                # Previous_Date = datetime.datetime.today() - datetime.timedelta(days=request.days_back)
-                # stocks[ticker] = stocks[ticker].truncate(before=Previous_Date.strftime('%Y-%m-%d'))
-                stocks[ticker] = stocks[ticker].tail(request.days_back)
+    print(req)
+    stocks = utils.getStocksData(tickers,req.days_back,req.save_data)
+    print(stocks)
+    # return stocks
+    for ticker in stocks.keys():
+        # Previous_Date = datetime.datetime.today() - datetime.timedelta(days=request.days_back)
+        # stocks[ticker] = stocks[ticker].truncate(before=Previous_Date.strftime('%Y-%m-%d'))
+        stocks[ticker] = stocks[ticker].tail(req.days_back)
     result = {}
-    for stock in list(request.tickers):
+    for stock in list(tickers):
         stocks[stock]['Date'] = stocks[stock].index.strftime('%Y-%m-%d')
         result[stock] = stocks[stock].to_dict(orient='records')
     json_compatible_item_data = jsonable_encoder(result)
     return json_compatible_item_data
 
 
-
 @app.get("/getTickers")
-async def getTickers():
-    stocks = {}
-    path = r"C:\Users\moyer\OneDrive\development\stocks.pkl"
-    with open(path, "rb") as pkl_handle:
-        stocks = pickle.load(pkl_handle)
-    # tickers = ['GOOG', 'MMM', 'AMD']
-    return stocks.keys()
+def getTickers():
+    return utils.getTickers()
+
 
 @app.post("/portfolio")
-async def portfolio(params, days_back: int,initial_capital:float):
+async def portfolio(params, days_back: int, initial_capital: float):
     with open(path, "rb") as pkl_handle:
         stocks = pickle.load(pkl_handle)
         for ticker in stocks.keys():
             stocks[ticker] = stocks[ticker].tail(days_back)
         portfolio = MyPortfolio(stocks, initial_capital=initial_capital)
-        
-
 
 
 @app.post("/backtestPortfolio")
