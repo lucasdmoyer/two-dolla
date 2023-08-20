@@ -9,3 +9,4 @@ stocks.pkl
 __pycache__/*
 balance_sheet_xbrl
 *.pyc
+backtrader_app/backtrader/*
