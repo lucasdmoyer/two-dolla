@@ -147,8 +147,8 @@ if __name__ == '__main__':
     data = btfeeds.GenericCSVData(
         dataname=path,
 
-        fromdate=datetime.datetime(2023, 4, 26),
-        todate=datetime.datetime(2023, 7, 15),
+        fromdate=datetime.datetime(2023, 1, 1),
+        todate=datetime.datetime(2023, 9, 1),
 
         nullvalue=0.0,
 

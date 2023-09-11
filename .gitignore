@@ -3,10 +3,12 @@
 /fin
 /fin2
 /__pycache__
-stocks.pkl
 curve
 stocks.pkl
 __pycache__/*
 balance_sheet_xbrl
 *.pyc
 backtrader_app/backtrader/*
+/datasets/*
+datasets/*
+C:/Users/moyer/OneDrive/development/fin-dashboard/app/stocks.pkl
