@@ -15,3 +15,4 @@ C:/Users/moyer/OneDrive/development/fin-dashboard/app/stocks.pkl
 stocks.pkl
 *.sqlite
 *.pkl
+*.csv
