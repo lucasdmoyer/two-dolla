@@ -139,8 +139,12 @@ class TestStrategy(bt.Strategy):
 
 
 def run_backtest(path="../datasets/stock_csvs/T.csv", fromdate=(2023, 1, 3), todate=(2023, 12, 26), debug=False):
+    print(fromdate)
+    print(todate)
     if (debug):
-        print("Debug set to True")
+        print("Debug set to True!!!!")
+        print(f"path is {path}" )
+        print(f"Dates are from {fromdate} to {todate}")
         showLogs = debug
 
     cerebro = bt.Cerebro()
